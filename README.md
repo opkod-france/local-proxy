@@ -1,18 +1,39 @@
 # Local Proxy
 
-Standalone machine-level Traefik proxy for local development.
+A standalone machine-level Traefik proxy for local development.
 
-This repository exists so all projects on a machine can share one reverse proxy instead of each project starting its own.
+## Problem this solves
 
-## What this gives you
+When multiple projects run locally, each project often tries to solve the same routing problem in its own way:
 
-- one shared Traefik container for the whole machine
+- every repo starts its own reverse proxy
+- local domains are inconsistent across projects
+- multiple proxies compete for port `80`
+- `/etc/hosts` becomes noisy and hard to maintain
+- developers need to remember different local setups for each project
+- debugging local routing becomes fragmented
+
+This repository solves that by moving local HTTP routing out of individual projects and into one shared machine-level proxy.
+
+## What this provides
+
+- one shared reverse proxy for the whole machine
 - one shared Docker network: `traefik-proxy`
-- project-specific local domains such as:
-  - `app.octopus.localhost.test`
-  - `cms.octopus.localhost.test`
-  - `landing.octopus.localhost.test`
-- one dashboard for debugging routing: `http://localhost:8080`
+- one consistent local domain convention for every project
+- one dashboard domain: `http://proxy.localhost.test`
+- one place to manage boot-time startup and wildcard DNS
+
+## Core idea
+
+Projects should not run their own Traefik container.
+
+Projects should only:
+
+1. join the external Docker network `traefik-proxy`
+2. expose Traefik labels on their services
+3. choose domains such as `app.<project>.localhost.test`
+
+This keeps project repos focused on the application, not on owning local routing infrastructure.
 
 ## How it works
 
@@ -23,17 +44,21 @@ flowchart LR
     Proxy[shared-local-proxy<br/>Traefik]
     Network[Docker network<br/>traefik-proxy]
 
-    Browser -->|app.project.localhost.test| DNS
+    Browser -->|app.alpha.localhost.test| DNS
+    Browser -->|api.beta.localhost.test| DNS
+    Browser -->|admin.gamma.localhost.test| DNS
+    Browser -->|proxy.localhost.test| DNS
     DNS --> Proxy
     Proxy --> Network
 
-    Network --> App[Project app service]
-    Network --> CMS[Project CMS service]
-    Network --> Landing[Project landing service]
+    Network --> Alpha[Project Alpha app]
+    Network --> Beta[Project Beta API]
+    Network --> Gamma[Project Gamma admin]
 
-    App -. labels .-> Proxy
-    CMS -. labels .-> Proxy
-    Landing -. labels .-> Proxy
+    Alpha -. labels .-> Proxy
+    Beta -. labels .-> Proxy
+    Gamma -. labels .-> Proxy
+    Proxy -. internal router .-> Dashboard[Traefik dashboard]
 ```
 
 ## Canonical names
@@ -41,6 +66,7 @@ flowchart LR
 - container: `shared-local-proxy`
 - network: `traefik-proxy`
 - repo: `opkod-france/local-proxy`
+- dashboard domain: `proxy.localhost.test`
 
 ## Prerequisites
 
@@ -88,11 +114,10 @@ Expected:
 
 - `shared-local-proxy` is running
 - port `80` is published
-- port `8080` is published
 
-Traefik dashboard:
+Dashboard:
 
-- `http://localhost:8080`
+- `http://proxy.localhost.test`
 
 ## Wildcard DNS with dnsmasq
 
@@ -106,17 +131,9 @@ The example config is in:
 
 - `dnsmasq/localhost.test.conf`
 
-If you do not use wildcard DNS, add explicit `/etc/hosts` entries for each project domain.
+If you do not use wildcard DNS, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
 
-## How projects should use this proxy
-
-Projects should not run their own Traefik container.
-
-Each project should:
-
-1. join the external Docker network `traefik-proxy`
-2. expose Traefik labels on app services
-3. route through domains like `app.<project>.localhost.test`
+## How projects integrate
 
 Example Compose snippet:
 
