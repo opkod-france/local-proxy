@@ -1,0 +1,9 @@
+- name: Ensure shared docker network exists
+  ansible.builtin.shell: |
+    docker network inspect traefik-proxy >/dev/null 2>&1 || docker network create traefik-proxy
+  changed_when: false
+
+- name: Start shared local proxy stack
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ local_proxy_repo_dir }}"

@@ -1,0 +1,10 @@
+- name: Ensure this playbook runs only on Linux
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Linux'
+    fail_msg: bootstrap-linux.yml must be run on Linux.
+
+- name: Configure host dnsmasq on Linux
+  ansible.builtin.command: ./scripts/setup-linux-dnsmasq.sh
+  args:
+    chdir: "{{ local_proxy_repo_dir }}"

@@ -1,0 +1,2 @@
+local_proxy_repo_dir: "{{ lookup('env', 'HOME') }}/projects/infra/local-proxy"
+local_proxy_compose_file: "{{ local_proxy_repo_dir }}/docker-compose.yml"

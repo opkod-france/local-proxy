@@ -1,0 +1,10 @@
+- name: Ensure this playbook runs only on Linux
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Linux'
+    fail_msg: bootstrap-linux.yml must be run on Linux.
+
+- name: Install systemd user service for shared local proxy
+  ansible.builtin.command: ./install-linux-systemd.sh
+  args:
+    chdir: "{{ local_proxy_repo_dir }}"

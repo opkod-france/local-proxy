@@ -1,0 +1,7 @@
+- name: Bootstrap shared local proxy on Linux
+  hosts: local
+  gather_facts: true
+  roles:
+    - dnsmasq_linux
+    - startup_service_linux
+    - local_proxy

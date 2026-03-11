@@ -1,0 +1,10 @@
+- name: Ensure this playbook runs only on macOS
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Darwin'
+    fail_msg: bootstrap-macos.yml must be run on macOS.
+
+- name: Install launchd service for shared local proxy
+  ansible.builtin.command: ./install-macos-launchd.sh
+  args:
+    chdir: "{{ local_proxy_repo_dir }}"

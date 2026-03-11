@@ -22,6 +22,7 @@ This repository solves that by moving local HTTP routing out of individual proje
 - one consistent local domain convention for every project
 - one dashboard domain: `http://proxy.localhost.test`
 - one place to manage boot-time startup and host-level wildcard DNS setup
+- an optional Ansible facilitator for machine bootstrap
 
 ## Important requirement
 
@@ -109,15 +110,44 @@ All examples below assume:
 - `install-linux-systemd.sh` - install boot-time startup on Linux
 - `launchd/com.shared-local-proxy.plist` - macOS launch agent template
 - `systemd/shared-local-proxy.service` - Linux systemd user unit template
+- `ansible/` - optional facilitator layer for machine bootstrap
 
-## Start the shared proxy
+## Manual setup
+
+### 1. Configure host DNS
+
+Preferred setup uses `dnsmasq` on the host machine, not in Docker.
+
+Wildcard rule:
+
+```conf
+address=/.localhost.test/127.0.0.1
+```
+
+macOS:
+
+```bash
+cd ~/projects/infra/local-proxy
+./scripts/setup-macos-dnsmasq.sh
+```
+
+Linux:
+
+```bash
+cd ~/projects/infra/local-proxy
+./scripts/setup-linux-dnsmasq.sh
+```
+
+If you do not configure `dnsmasq`, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
+
+### 2. Start the shared proxy
 
 ```bash
 cd ~/projects/infra/local-proxy
 docker compose up -d
 ```
 
-Verify:
+### 3. Verify
 
 ```bash
 docker ps --filter name=shared-local-proxy --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
@@ -132,58 +162,33 @@ Dashboard:
 
 - `http://proxy.localhost.test`
 
-## Host DNS setup with dnsmasq
+## Facilitated setup with Ansible
 
-Preferred setup uses `dnsmasq` on the host machine, not in Docker.
+If you want a repeatable machine bootstrap, use the playbooks in `ansible/`.
 
-Wildcard rule:
+See:
 
-```conf
-address=/.localhost.test/127.0.0.1
-```
+- `ansible/README.md`
 
-### macOS
-
-Assumes:
-
-- Homebrew is installed
-- `dnsmasq` is installed with Homebrew
-
-Run:
+macOS:
 
 ```bash
-cd ~/projects/infra/local-proxy
-./scripts/setup-macos-dnsmasq.sh
+cd ~/projects/infra/local-proxy/ansible
+ansible-playbook -i inventory/localhost.ini bootstrap-macos.yml
 ```
 
-This will:
-
-- copy the wildcard config into your Homebrew `dnsmasq.d` directory
-- create `/etc/resolver/localhost.test`
-- start `dnsmasq` via `brew services`
-
-### Linux
-
-Assumes:
-
-- `dnsmasq` is already installed
-- `systemctl` manages the service
-
-Run:
+Linux:
 
 ```bash
-cd ~/projects/infra/local-proxy
-./scripts/setup-linux-dnsmasq.sh
+cd ~/projects/infra/local-proxy/ansible
+ansible-playbook -i inventory/localhost.ini bootstrap-linux.yml
 ```
 
-This will:
+The Ansible layer handles:
 
-- copy the wildcard config into `/etc/dnsmasq.d/localhost.test.conf`
-- restart `dnsmasq`
-
-### Fallback
-
-If you do not configure `dnsmasq`, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
+- host-level `dnsmasq` setup
+- boot-time service installation
+- starting the shared proxy stack
 
 ## How projects integrate
 

@@ -1,0 +1,7 @@
+- name: Bootstrap shared local proxy on macOS
+  hosts: local
+  gather_facts: true
+  roles:
+    - dnsmasq_macos
+    - startup_service_macos
+    - local_proxy

@@ -1,0 +1,10 @@
+- name: Ensure this playbook runs only on macOS
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Darwin'
+    fail_msg: bootstrap-macos.yml must be run on macOS.
+
+- name: Configure host dnsmasq on macOS
+  ansible.builtin.command: ./scripts/setup-macos-dnsmasq.sh
+  args:
+    chdir: "{{ local_proxy_repo_dir }}"
