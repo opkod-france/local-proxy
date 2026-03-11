@@ -21,7 +21,19 @@ This repository solves that by moving local HTTP routing out of individual proje
 - one shared Docker network: `traefik-proxy`
 - one consistent local domain convention for every project
 - one dashboard domain: `http://proxy.localhost.test`
-- one place to manage boot-time startup and wildcard DNS
+- one place to manage boot-time startup and host-level wildcard DNS setup
+
+## Important requirement
+
+Wildcard local domains are a host-level DNS concern.
+
+`dnsmasq` is **not** part of the Docker Compose stack because your browser and operating system must resolve domains such as `app.project.localhost.test` before traffic ever reaches Docker.
+
+That means:
+
+- Traefik runs in Docker
+- wildcard DNS must be configured on the host machine
+- if you do not configure host DNS, you must use explicit `/etc/hosts` entries instead
 
 ## Core idea
 
@@ -40,7 +52,7 @@ This keeps project repos focused on the application, not on owning local routing
 ```mermaid
 flowchart LR
     Browser[Browser]
-    DNS[Wildcard DNS or /etc/hosts]
+    DNS[Host DNS<br/>dnsmasq or /etc/hosts]
     Proxy[shared-local-proxy<br/>Traefik]
     Network[Docker network<br/>traefik-proxy]
 
@@ -65,21 +77,20 @@ flowchart LR
 
 - container: `shared-local-proxy`
 - network: `traefik-proxy`
-- repo: `opkod-france/local-proxy`
 - dashboard domain: `proxy.localhost.test`
 
 ## Prerequisites
 
 - Docker Desktop or a running Docker daemon
 - permission to bind to port `80`
-- wildcard DNS for `*.localhost.test` via `dnsmasq`, or explicit `/etc/hosts` entries
+- host-level wildcard DNS for `*.localhost.test` via `dnsmasq`, or explicit `/etc/hosts` entries
 
 ## Recommended local path
 
 Clone this repository anywhere you keep shared local infrastructure. Example:
 
 ```bash
-git clone https://github.com/opkod-france/local-proxy.git ~/projects/infra/local-proxy
+git clone <your-org-or-user>/local-proxy.git ~/projects/infra/local-proxy
 ```
 
 All examples below assume:
@@ -92,6 +103,8 @@ All examples below assume:
 
 - `docker-compose.yml` - shared Traefik stack
 - `dnsmasq/localhost.test.conf` - wildcard DNS example
+- `scripts/setup-macos-dnsmasq.sh` - configure host DNS on macOS
+- `scripts/setup-linux-dnsmasq.sh` - configure host DNS on Linux
 - `install-macos-launchd.sh` - install boot-time startup on macOS
 - `install-linux-systemd.sh` - install boot-time startup on Linux
 - `launchd/com.shared-local-proxy.plist` - macOS launch agent template
@@ -119,19 +132,58 @@ Dashboard:
 
 - `http://proxy.localhost.test`
 
-## Wildcard DNS with dnsmasq
+## Host DNS setup with dnsmasq
 
-Preferred setup:
+Preferred setup uses `dnsmasq` on the host machine, not in Docker.
+
+Wildcard rule:
 
 ```conf
 address=/.localhost.test/127.0.0.1
 ```
 
-The example config is in:
+### macOS
 
-- `dnsmasq/localhost.test.conf`
+Assumes:
 
-If you do not use wildcard DNS, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
+- Homebrew is installed
+- `dnsmasq` is installed with Homebrew
+
+Run:
+
+```bash
+cd ~/projects/infra/local-proxy
+./scripts/setup-macos-dnsmasq.sh
+```
+
+This will:
+
+- copy the wildcard config into your Homebrew `dnsmasq.d` directory
+- create `/etc/resolver/localhost.test`
+- start `dnsmasq` via `brew services`
+
+### Linux
+
+Assumes:
+
+- `dnsmasq` is already installed
+- `systemctl` manages the service
+
+Run:
+
+```bash
+cd ~/projects/infra/local-proxy
+./scripts/setup-linux-dnsmasq.sh
+```
+
+This will:
+
+- copy the wildcard config into `/etc/dnsmasq.d/localhost.test.conf`
+- restart `dnsmasq`
+
+### Fallback
+
+If you do not configure `dnsmasq`, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
 
 ## How projects integrate
 
@@ -194,9 +246,11 @@ docker network ls | grep traefik-proxy
 
 ### A project domain does not resolve
 
-Either:
+Check host DNS first. The most common failure is that `dnsmasq` is not installed or not configured on the host.
 
-- configure `dnsmasq` for `*.localhost.test`
+Then either:
+
+- configure host-level `dnsmasq` for `*.localhost.test`
 - or add the domain to `/etc/hosts`
 
 ### Multiple Traefik containers exist
