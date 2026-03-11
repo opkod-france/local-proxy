@@ -1,124 +1,40 @@
 # Local Proxy
 
-A standalone machine-level Traefik proxy for local development.
+One shared local reverse proxy for all your projects.
 
-## Problem this solves
+`local-proxy` solves the usual local-routing sprawl: duplicate Traefik containers, competing port `80` bindings, inconsistent local domains, and per-project proxy setup that every team has to rediscover.
 
-When multiple projects run locally, each project often tries to solve the same routing problem in its own way:
+## Why this exists
 
-- every repo starts its own reverse proxy
-- local domains are inconsistent across projects
+Without a shared local proxy, teams usually end up with some combination of these problems:
+
+- each repository owns its own reverse proxy
 - multiple proxies compete for port `80`
-- `/etc/hosts` becomes noisy and hard to maintain
-- developers need to remember different local setups for each project
-- debugging local routing becomes fragmented
+- local domains differ from project to project
+- `/etc/hosts` gets noisy and hard to maintain
+- onboarding depends on project-specific tribal knowledge
+- debugging local routing is fragmented across repos
 
-This repository solves that by moving local HTTP routing out of individual projects and into one shared machine-level proxy.
+This repository centralizes that concern into one machine-level layer.
 
-## What this provides
+## What you get
 
 - one shared reverse proxy for the whole machine
 - one shared Docker network: `traefik-proxy`
-- one consistent local domain convention for every project
+- one consistent domain model for every local project
 - one dashboard domain: `http://proxy.localhost.test`
-- one place to manage boot-time startup and host-level wildcard DNS setup
-- an optional Ansible facilitator for machine bootstrap
+- one place to manage boot-time startup
+- one optional Ansible bootstrap path for team onboarding
 
-## Important requirement
-
-Wildcard local domains are a host-level DNS concern.
-
-`dnsmasq` is **not** part of the Docker Compose stack because your browser and operating system must resolve domains such as `app.project.localhost.test` before traffic ever reaches Docker.
-
-That means:
-
-- Traefik runs in Docker
-- wildcard DNS must be configured on the host machine
-- if you do not configure host DNS, you must use explicit `/etc/hosts` entries instead
-
-## Core idea
-
-Projects should not run their own Traefik container.
-
-Projects should only:
-
-1. join the external Docker network `traefik-proxy`
-2. expose Traefik labels on their services
-3. choose domains such as `app.<project>.localhost.test`
-
-This keeps project repos focused on the application, not on owning local routing infrastructure.
-
-## How it works
-
-```mermaid
-flowchart LR
-    Browser[Browser]
-    DNS[Host DNS<br/>dnsmasq or /etc/hosts]
-    Proxy[shared-local-proxy<br/>Traefik]
-    Network[Docker network<br/>traefik-proxy]
-
-    Browser -->|app.alpha.localhost.test| DNS
-    Browser -->|api.beta.localhost.test| DNS
-    Browser -->|admin.gamma.localhost.test| DNS
-    Browser -->|proxy.localhost.test| DNS
-    DNS --> Proxy
-    Proxy --> Network
-
-    Network --> Alpha[Project Alpha app]
-    Network --> Beta[Project Beta API]
-    Network --> Gamma[Project Gamma admin]
-
-    Alpha -. labels .-> Proxy
-    Beta -. labels .-> Proxy
-    Gamma -. labels .-> Proxy
-    Proxy -. internal router .-> Dashboard[Traefik dashboard]
-```
-
-## Canonical names
-
-- container: `shared-local-proxy`
-- network: `traefik-proxy`
-- dashboard domain: `proxy.localhost.test`
-
-## Prerequisites
-
-- Docker Desktop or a running Docker daemon
-- permission to bind to port `80`
-- host-level wildcard DNS for `*.localhost.test` via `dnsmasq`, or explicit `/etc/hosts` entries
-
-## Recommended local path
-
-Clone this repository anywhere you keep shared local infrastructure. Example:
-
-```bash
-git clone <your-org-or-user>/local-proxy.git ~/projects/infra/local-proxy
-```
-
-All examples below assume:
-
-```text
-~/projects/infra/local-proxy
-```
-
-## Files in this repo
-
-- `docker-compose.yml` - shared Traefik stack
-- `dnsmasq/localhost.test.conf` - wildcard DNS example
-- `scripts/setup-macos-dnsmasq.sh` - configure host DNS on macOS
-- `scripts/setup-linux-dnsmasq.sh` - configure host DNS on Linux
-- `install-macos-launchd.sh` - install boot-time startup on macOS
-- `install-linux-systemd.sh` - install boot-time startup on Linux
-- `launchd/com.shared-local-proxy.plist` - macOS launch agent template
-- `systemd/shared-local-proxy.service` - Linux systemd user unit template
-- `ansible/` - optional facilitator layer for machine bootstrap
-
-## Manual setup
+## Quickstart
 
 ### 1. Configure host DNS
 
-Preferred setup uses `dnsmasq` on the host machine, not in Docker.
+Wildcard local domains are a host-level dependency.
 
-Wildcard rule:
+`dnsmasq` is **not** part of the Docker Compose stack because your browser and operating system must resolve domains such as `app.project.localhost.test` before traffic ever reaches Docker.
+
+Preferred wildcard rule:
 
 ```conf
 address=/.localhost.test/127.0.0.1
@@ -138,7 +54,7 @@ cd ~/projects/infra/local-proxy
 ./scripts/setup-linux-dnsmasq.sh
 ```
 
-If you do not configure `dnsmasq`, add explicit `/etc/hosts` entries for each project domain, including `proxy.localhost.test`.
+If you do not configure `dnsmasq`, use explicit `/etc/hosts` entries instead.
 
 ### 2. Start the shared proxy
 
@@ -153,18 +69,88 @@ docker compose up -d
 docker ps --filter name=shared-local-proxy --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 ```
 
-Expected:
-
-- `shared-local-proxy` is running
-- port `80` is published
-
-Dashboard:
+Open:
 
 - `http://proxy.localhost.test`
 
+## How it works
+
+Projects should not run their own Traefik container.
+
+Each project should only:
+
+1. join the external Docker network `traefik-proxy`
+2. expose Traefik labels on its services
+3. choose domains such as `app.<project>.localhost.test`
+
+That keeps local routing infrastructure centralized while individual repos stay focused on the application.
+
+```mermaid
+flowchart LR
+    Browser[Browser]
+    DNS[Host DNS<br/>dnsmasq or /etc/hosts]
+    Proxy[shared-local-proxy<br/>Traefik]
+    Network[Docker network<br/>traefik-proxy]
+
+    Browser -->|app.alpha.localhost.test| DNS
+    Browser -->|api.beta.localhost.test| DNS
+    Browser -->|admin.gamma.localhost.test| DNS
+    Browser -->|proxy.localhost.test| DNS
+
+    DNS --> Proxy
+    Proxy --> Network
+
+    Network --> Alpha[Project Alpha service]
+    Network --> Beta[Project Beta service]
+    Network --> Gamma[Project Gamma service]
+
+    Alpha -. Traefik labels .-> Proxy
+    Beta -. Traefik labels .-> Proxy
+    Gamma -. Traefik labels .-> Proxy
+    Proxy -. internal router .-> Dashboard[Traefik dashboard]
+```
+
+## Canonical names
+
+- container: `shared-local-proxy`
+- network: `traefik-proxy`
+- dashboard domain: `proxy.localhost.test`
+
+## Prerequisites
+
+- Docker Desktop or a running Docker daemon
+- permission to bind to port `80`
+- host DNS configured for `*.localhost.test`, or explicit `/etc/hosts` entries
+
+## Recommended install path
+
+Clone this repository anywhere you keep shared local infrastructure. Example:
+
+```bash
+git clone <your-org-or-user>/local-proxy.git ~/projects/infra/local-proxy
+```
+
+All examples in this README assume:
+
+```text
+~/projects/infra/local-proxy
+```
+
+## Repository layout
+
+- `docker-compose.yml` - shared Traefik stack
+- `dnsmasq/localhost.test.conf` - wildcard DNS example
+- `scripts/setup-macos-dnsmasq.sh` - configure host DNS on macOS
+- `scripts/setup-linux-dnsmasq.sh` - configure host DNS on Linux
+- `install-macos-launchd.sh` - install boot-time startup on macOS
+- `install-linux-systemd.sh` - install boot-time startup on Linux
+- `launchd/com.shared-local-proxy.plist` - macOS launch agent template
+- `systemd/shared-local-proxy.service` - Linux systemd user unit template
+- `ansible/` - optional facilitator layer for repeatable machine bootstrap
+
 ## Facilitated setup with Ansible
 
-If you want a repeatable machine bootstrap, use the playbooks in `ansible/`.
+Use Ansible if you want a repeatable machine bootstrap instead of running the setup scripts manually.
 
 See:
 
@@ -257,7 +243,3 @@ Then either:
 
 - configure host-level `dnsmasq` for `*.localhost.test`
 - or add the domain to `/etc/hosts`
-
-### Multiple Traefik containers exist
-
-You should have only one shared proxy. Remove project-owned or stale Traefik containers and keep only `shared-local-proxy`.
