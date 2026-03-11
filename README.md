@@ -2,7 +2,7 @@
 
 Standalone machine-level Traefik proxy for local development.
 
-This repository exists so all projects on the machine can share one reverse proxy instead of each project starting its own.
+This repository exists so all projects on a machine can share one reverse proxy instead of each project starting its own.
 
 ## What this gives you
 
@@ -14,17 +14,53 @@ This repository exists so all projects on the machine can share one reverse prox
   - `landing.octopus.localhost.test`
 - one dashboard for debugging routing: `http://localhost:8080`
 
+## How it works
+
+```mermaid
+flowchart LR
+    Browser[Browser]
+    DNS[Wildcard DNS or /etc/hosts]
+    Proxy[shared-local-proxy<br/>Traefik]
+    Network[Docker network<br/>traefik-proxy]
+
+    Browser -->|app.project.localhost.test| DNS
+    DNS --> Proxy
+    Proxy --> Network
+
+    Network --> App[Project app service]
+    Network --> CMS[Project CMS service]
+    Network --> Landing[Project landing service]
+
+    App -. labels .-> Proxy
+    CMS -. labels .-> Proxy
+    Landing -. labels .-> Proxy
+```
+
 ## Canonical names
 
 - container: `shared-local-proxy`
 - network: `traefik-proxy`
-- repo path: `/Users/ayoub/projects/infra/local-proxy`
+- repo: `opkod-france/local-proxy`
 
 ## Prerequisites
 
 - Docker Desktop or a running Docker daemon
 - permission to bind to port `80`
 - wildcard DNS for `*.localhost.test` via `dnsmasq`, or explicit `/etc/hosts` entries
+
+## Recommended local path
+
+Clone this repository anywhere you keep shared local infrastructure. Example:
+
+```bash
+git clone https://github.com/opkod-france/local-proxy.git ~/projects/infra/local-proxy
+```
+
+All examples below assume:
+
+```text
+~/projects/infra/local-proxy
+```
 
 ## Files in this repo
 
@@ -38,7 +74,7 @@ This repository exists so all projects on the machine can share one reverse prox
 ## Start the shared proxy
 
 ```bash
-cd /Users/ayoub/projects/infra/local-proxy
+cd ~/projects/infra/local-proxy
 docker compose up -d
 ```
 
@@ -104,16 +140,18 @@ networks:
 macOS:
 
 ```bash
-cd /Users/ayoub/projects/infra/local-proxy
+cd ~/projects/infra/local-proxy
 ./install-macos-launchd.sh
 ```
 
 Linux:
 
 ```bash
-cd /Users/ayoub/projects/infra/local-proxy
+cd ~/projects/infra/local-proxy
 ./install-linux-systemd.sh
 ```
+
+If you use a different local path, update the path in the corresponding `launchd` or `systemd` file before installing it.
 
 ## Troubleshooting
 
